@@ -1,0 +1,10 @@
+{
+    "dbType": "sqlserver",
+    "schema": "public",
+    "server": "192.168.200.66",
+    "database": "",
+    "username": "",
+    "password": "",
+    "port": "1639",
+    "table": ""
+}
