@@ -11,6 +11,7 @@ import pyodbc
 
 # 定义配置文件路径
 json_file_name = "config.json"
+sql_file_name = "sql.sql"
 
 # 假设这是一个全局变量来持有数据库连接信息
 db_settings = {
@@ -22,10 +23,11 @@ db_settings = {
     'password': '',
     'port': '',
     'table': '',
+    'sql': '',
 }
 
 
-def run_query_sqlserver(server, database, username, password, port, table, newWindow):
+def run_query_sqlserver(server, database, username, password, port, table):
     sqlStr = text_area.get("1.0", "end-1c")  # 正确获取Text组件中的全部文本
     try:
         server = server + "," + port if port is not None and len(port) > 0 else server
@@ -41,7 +43,6 @@ def run_query_sqlserver(server, database, username, password, port, table, newWi
         export_to_excel(df)
 
     except Exception as e:
-        newWindow.destroy()  # 出现异常时关闭窗口
         messagebox.showerror("Error", f"Could not connect to database: {e}")
 
 
@@ -58,8 +59,8 @@ def export_to_excel(df):
         messagebox.showerror("Error", str(e))
 
 
-def run_query_pgsql(server, database, username, password, port, table, newWindow):
-    sqlStr = text_area.text_area.get("1.0", "end-1c")  # 正确获取Text组件中的全部文本
+def run_query_pgsql(server, database, username, password, port, table):
+    sqlStr = text_area.get("1.0", "end-1c")  # 正确获取Text组件中的全部文本
     schema = schema_entry.get()
     try:
         # PostgreSQL连接字符串
@@ -82,7 +83,6 @@ def run_query_pgsql(server, database, username, password, port, table, newWindow
         export_to_excel(df)
 
     except Exception as e:
-        newWindow.destroy()  # 出现异常时关闭窗口
         messagebox.showerror("Error", f"Could not connect to database: {e}")
 
 
@@ -92,7 +92,13 @@ def update_config_json(new_config):
         json.dump(new_config, file, ensure_ascii=False, indent=4)
 
 
-def db_to_excel(progressbar, newWindow):
+def update_config_sql(sql_content):
+    # 写入到SQL文件
+    with open(sql_file_name, 'w', encoding='utf-8') as file:
+        file.write(sql_content)
+
+
+def db_to_excel():
     # 从输入字段获取数据库连接信息
     dbType = db_type_combobox.get()
     schema = schema_entry.get()
@@ -102,21 +108,18 @@ def db_to_excel(progressbar, newWindow):
     password = password_entry.get()
     port = port_entry.get()
     table = table_entry.get()
+    sql = text_area.get("1.0", "end-1c")
     if server is None or len(server) < 1:
         messagebox.showerror("Error", "数据库链接地址server不能为空")
-        newWindow.destroy()
         return
     if database is None or len(database) < 1:
         messagebox.showerror("Error", "数据库名称database不能为空")
-        newWindow.destroy()
         return
     if username is None or len(username) < 1:
         messagebox.showerror("Error", "数据库登录名username不能为空")
-        newWindow.destroy()
         return
     if password is None or len(password) < 1:
         messagebox.showerror("Error", "数据库链接密码password不能为空")
-        newWindow.destroy()
         return
 
     new_config = {
@@ -130,12 +133,13 @@ def db_to_excel(progressbar, newWindow):
         'table': table,
     }
     update_config_json(new_config)
+    update_config_sql(sql)
 
     dbType = db_type_combobox.get()
     if dbType == "sqlserver":
-        run_query_sqlserver(server, database, username, password, port, table, newWindow)
+        run_query_sqlserver(server, database, username, password, port, table)
     elif dbType == "pgsql":
-        run_query_pgsql(server, database, username, password, port, table, newWindow)
+        run_query_pgsql(server, database, username, password, port, table)
 
 
 def load_db_settings():
@@ -145,7 +149,15 @@ def load_db_settings():
 
     # 加载配置文件
     with open(json_file_name, 'r') as config_file:
-        return json.load(config_file)
+        jsonObj = json.load(config_file)
+        # 加载sql文件
+        if not os.path.isfile(sql_file_name):
+            jsonObj["sql"] = ""
+            return jsonObj
+        with open(sql_file_name, 'r', encoding='utf-8') as file:
+            sql_content_from_file = file.read()
+            jsonObj["sql"] = sql_content_from_file
+            return jsonObj
 
 
 # 配置文件的数据库设置
@@ -153,7 +165,7 @@ db_settings = load_db_settings()
 
 # 创建窗体
 root = tk.Tk()
-root.title("表结构与结构体转换工具")
+root.title("SQL导出Excel工具")
 
 # 创建一个容器Frame，并设置宽度
 container = tk.Frame(root, width=200, height=100)
@@ -231,14 +243,8 @@ table_entry.insert(0, db_settings['table'])
 
 
 def open_progressbar_window(fun):
-    newWindow = tk.Toplevel(root)
-    newWindow.title("执行进度")
-    newWindow.geometry("300x50")
-    progressbar = ttk.Progressbar(newWindow, orient=tk.HORIZONTAL, length=280, mode='determinate')
-    progressbar.grid(row=10, column=0, pady=10, sticky="n")
-
     # 在单独的线程中开始任务
-    threading.Thread(target=fun, args=(progressbar, newWindow,)).start()
+    threading.Thread(target=fun, args=()).start()
 
 
 open_db_button = tk.Button(root, text="导出Excel",
@@ -247,5 +253,6 @@ open_db_button.grid(row=11, column=0, pady=10, sticky="nwe")
 
 text_area = scrolledtext.ScrolledText(root, wrap=tk.WORD)
 text_area.grid(row=12, column=0, pady=10, sticky="nwe")
+text_area.insert(tk.INSERT, db_settings['sql'])
 
 root.mainloop()
